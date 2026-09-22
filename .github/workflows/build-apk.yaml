@@ -75,15 +75,6 @@ jobs:
       - name: Build APK
         working-directory: ./workspace/${{ github.event.inputs.subdir }}
         run: |
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper
-          fi
-
-          chmod +x gradlew
-
-          # Accept all Android SDK/NDK licenses non-interactively.
-          yes | sdkmanager --licenses > /dev/null || true
-
           LOG_FILE="$(mktemp)"
 
           handle_failure() {
@@ -93,7 +84,7 @@ jobs:
 
               if grep -q "What went wrong:" "$LOG_FILE"; then
                 echo '```'
-                awk '/\* What went wrong:/{p=1} p; /\* Try:/{if(p) exit}' "$LOG_FILE"
+                awk '{gsub(/\x1B\[[0-9;]*[a-zA-Z]/,"")} /What went wrong:/{p=1} p; /\* Try:/{if(p) exit}' "$LOG_FILE"
                 echo '```'
               else
                 echo 'No `* What went wrong:` block found. Tail of build log:'
@@ -106,6 +97,24 @@ jobs:
               echo '> Full logs are available in the "Build APK" step output above.'
             } >> "$GITHUB_STEP_SUMMARY"
           }
+
+          if [ ! -f "gradlew" ]; then
+            echo "gradlew not found, generating wrapper..."
+            set +e
+            set -o pipefail
+            gradle wrapper 2>&1 | tee "$LOG_FILE"
+            STATUS=${PIPESTATUS[0]}
+            set -e
+            if [ $STATUS -ne 0 ]; then
+              handle_failure
+              exit $STATUS
+            fi
+          fi
+
+          chmod +x gradlew
+
+          # Accept all Android SDK/NDK licenses non-interactively.
+          yes | sdkmanager --licenses > /dev/null || true
 
           if [[ "${{ github.event.inputs.taskName }}" == *Release* ]]; then
             echo "Task contains 'Release', attempting to sign a release build with a debug key."
@@ -135,7 +144,7 @@ jobs:
               -Pandroid.injected.signing.store.password=android \
               -Pandroid.injected.signing.key.alias=androiddebugkey \
               -Pandroid.injected.signing.key.password=android \
-              --stacktrace 2>&1 | tee "$LOG_FILE"
+              --stacktrace 2>&1 | tee -a "$LOG_FILE"
 
             STATUS=${PIPESTATUS[0]}
 
@@ -150,7 +159,7 @@ jobs:
             set -o pipefail
 
             ./gradlew ${{ github.event.inputs.taskName }} \
-              --stacktrace 2>&1 | tee "$LOG_FILE"
+              --stacktrace 2>&1 | tee -a "$LOG_FILE"
 
             STATUS=${PIPESTATUS[0]}
 
