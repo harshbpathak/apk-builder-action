@@ -125,6 +125,10 @@ jobs:
           }
           trap 'handle_failure "$?"' ERR
 
+          if [ -n "${JAVA_HOME:-}" ]; then
+            export GRADLE_OPTS="${GRADLE_OPTS:+$GRADLE_OPTS }-Dorg.gradle.java.home=$JAVA_HOME"
+          fi
+
           # Run a command, tee its output into $LOG_FILE, and on failure
           # write a failure summary and exit with the command's status.
           run_logged() {
